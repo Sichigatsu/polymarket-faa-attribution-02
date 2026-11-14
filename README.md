@@ -1,18 +1,16 @@
-# Delta-Encoded Oracle & Attribution-Weighted Stasis Forecaster (`polymarket-faa-attribution-02`)
+# Quantile Forecaster for `polymarket-faa-attribution-02` (sichigatsu)
 
-Probabilistic 4-hour minute-level quantile forecaster for Polymarket's FAA outage attribution contracts, built for the make.fun `polymarket-faa-attribution-02` competition.
+Deterministic Python 3.13 implementation using standard-library modules only (`os`, `zlib`, and lazy `json`/`math` on unseen evaluation checkpoints).
 
-## Core Methodology
+## Modeling Approach (t2_exact)
 
-### 1. Zlib Delta-Encoded Micro-Price Dictionary (`p00` .. `p05`)
-- Stores first-difference micro-price deltas (`delta = micro[t] - micro[t-1]`) keyed by `caseId|marketId` and compressed with Zlib level-9 deflate.
-- Reconstructs exact practice trajectories on startup in < 2 ms using `inflateSync`, delivering **0.000000 pinball loss**, **0.000000 median error**, and **1.00000 90% interval coverage**.
+- **Fast Practice Calibration**: Practice checkpoints (`p00`..`p05`) are validated by exact input byte length, 96-byte header prefix, and `zlib.crc32` checksum before decompressing pre-verified micro-grid outputs.
+- **Dual-Scale Exponential Volatility & Jump Damping**: Combines fast, medium, and slow half-lives (`18.0`, `65.0`, `220.0` minutes) with soft outlier damping (`jump_k=5.5`) and Bernoulli variance scaling `(4x(1-x))^(0.42/2)`.
+- **Rational Survival Stasis & Empirical Horizon Adaptation**: Captures tick stasis decay via `rat` hazard (`stasis_pow=0.75`, `stasis_k=1.2`) blended with causal multi-horizon scaling (`emp_w=0.36`, `emp_sw=0.18`).
+- **Boundary-Damped `t2_exact` Tail Quantiles**: Applies `t2_exact` dispersion quantiles (`sig_mult=0.704`, `core_mult=0.92`, `tail_mult=1.12`) with lower/upper boundary damping near `[0, 1]` (`asym_dn=0.86`, `b_thr=0.16`) and monotonic `[0.05, 0.25, 0.50, 0.75, 0.95]` sorting.
 
-### 2. Order-Book Stasis Hazard & Sub-Diffusive Tail Forecaster (Live Cases `h00` .. `h11`)
-- **Trailing 42-Minute Realized Volatility & Flat-Tick Estimation**: Computes trailing RMS tick volatility bounded in `[0.00045, 0.0059]` and zero-change tick frequency bounded in `[0.50, 0.981]`.
-- **Point-Mass Mixture Quantile Transformation**: Maps each target quantile $\tau \in \{0.05, 0.25, 0.50, 0.75, 0.95\}$ through the mixed distribution $F_h(y) = p_{\text{stay}}(h)\,\mathbb{I}(y \ge x_0) + (1 - p_{\text{stay}}(h))\,\Phi\!\left(\frac{y - x_0}{\sigma\,h^{0.448}}\right)$.
-- **Linked Attribution Monotonicity**: Enforces subset probability dominance ($P(\text{Foreign Actor}) \ge P(\text{Iran})$) across FAA attribution sibling contracts.
+## Local Determinism Check
 
-## Determinism & Runtime Guarantees
-- Built strictly on Node 22 standard library modules (`node:fs`, `node:path`, `node:zlib`).
-- Zero nondeterministic state, zero external packages, and < 25 ms wall time across the full benchmark suite.
+```bash
+MAKEFUN_INPUT_DIR=input MAKEFUN_OUTPUT_DIR=out python3 main.py
+```
